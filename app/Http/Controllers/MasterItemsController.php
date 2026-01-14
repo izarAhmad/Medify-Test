@@ -112,4 +112,57 @@ class MasterItemsController extends Controller
         $random = rand(0,4);
         return $array[$random];
     }
+
+        public function exportExcel()
+    {
+        $items = MasterItem::with('kategoris')->orderBy('id')->get();
+
+        $filename = 'master-items-' . date('Y-m-d-His') . '.csv';
+        
+        $headers = [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0'
+        ];
+
+        $callback = function() use ($items) {
+            $file = fopen('php://output', 'w');
+            
+            // Add BOM untuk support UTF-8 di Excel
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            // Header
+            fputcsv($file, ['No', 'Nama Kategori (terpisah koma)', 'Nama Items', 'Nama Supplier', 'Harga', 'Laba', 'Harga Jual']);
+
+            // Data
+            $no = 1;
+            foreach ($items as $item) {
+                // Get kategori names
+                $kategori_names = $item->kategoris->pluck('nama')->implode(', ');
+                if (empty($kategori_names)) {
+                    $kategori_names = '-';
+                }
+
+                // Calculate harga jual
+                $harga_jual = $item->harga_beli + ($item->harga_beli * $item->laba / 100);
+
+                fputcsv($file, [
+                    $no++,
+                    $kategori_names,
+                    $item->nama,
+                    $item->supplier,
+                    $item->harga_beli,
+                    $item->laba,
+                    $harga_jual
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }
+
